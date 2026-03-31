@@ -1,0 +1,256 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Premium Warm Palette */
+    --background: 40 20% 98%;
+    --foreground: 24 10% 10%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 10%;
+    
+    --primary: 24 80% 25%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 40 20% 96%;
+    --secondary-foreground: 24 10% 10%;
+    
+    --muted: 40 15% 94%;
+    --muted-foreground: 24 8% 40%;
+    
+    --accent: 38 90% 50%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 75% 45%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 24 80% 25%;
+    
+    --radius: 0.5rem;
+    
+    /* Status Colors */
+    --success: 160 75% 35%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 90% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 85% 53%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 24 15% 8%;
+    --foreground: 40 20% 95%;
+    --card: 24 12% 12%;
+    --card-foreground: 40 20% 95%;
+    --primary: 38 90% 55%;
+    --primary-foreground: 24 15% 8%;
+    --secondary: 24 12% 18%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 24 12% 15%;
+    --muted-foreground: 40 10% 60%;
+    --accent: 38 90% 55%;
+    --accent-foreground: 24 15% 8%;
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 24 12% 22%;
+    --input: 24 12% 22%;
+    --ring: 38 90% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Outfit', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'DM Serif Display', serif;
+    font-weight: 400;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Smooth Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.4s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+/* Staggered Animation Delays */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+
+/* Card Hover Effects */
+.card-luxury {
+  @apply transition-all duration-300 ease-out;
+}
+
+.card-luxury:hover {
+  @apply shadow-xl;
+  transform: translateY(-2px);
+}
+
+/* Button Hover Effects */
+.btn-luxury {
+  @apply relative overflow-hidden transition-all duration-300 ease-out;
+}
+
+.btn-luxury::before {
+  content: '';
+  @apply absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-300;
+}
+
+.btn-luxury:hover::before {
+  @apply opacity-100;
+}
+
+/* Badge Styles */
+.badge-luxury {
+  @apply font-medium text-xs px-2.5 py-0.5 rounded-full;
+}
+
+.badge-success {
+  @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400;
+}
+
+.badge-warning {
+  @apply bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400;
+}
+
+.badge-error {
+  @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400;
+}
+
+.badge-info {
+  @apply bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400;
+}
+
+/* Input Focus */
+.input-luxury {
+  @apply transition-all duration-200 border-2;
+}
+
+.input-luxury:focus {
+  @apply border-primary ring-2 ring-primary/20;
+}
+
+/* Sidebar Transitions */
+.sidebar-link {
+  @apply relative flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200;
+}
+
+.sidebar-link::before {
+  content: '';
+  @apply absolute left-0 top-1/2 -translate-y-1/2 w-0 h-0 bg-primary rounded-r-full transition-all duration-300;
+}
+
+.sidebar-link:hover::before {
+  @apply h-4 w-1;
+}
+
+.sidebar-link.active {
+  @apply text-primary bg-primary/5;
+}
+
+.sidebar-link.active::before {
+  @apply h-6 w-1.5;
+}
+
+/* Grid Pattern Background */
+.bg-pattern {
+  background-image: 
+    linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
