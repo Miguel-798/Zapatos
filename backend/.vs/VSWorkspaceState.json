@@ -7,6 +7,6 @@
     "\\app\\infrastructure",
     "\\app\\infrastructure\\database"
   ],
-  "SelectedNode": "\\runtime.txt",
+  "SelectedNode": "\\.env",
   "PreviewInSolutionExplorer": false
 }
