@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -9,9 +10,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# CORS configuration - allow Vercel frontend and localhost
+cors_origins = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "https://zapatos-pink.vercel.app",
+]
+# Add any additional frontend URLs from environment variable
+if os.getenv("FRONTEND_URLS"):
+    cors_origins.extend(os.getenv("FRONTEND_URLS").split(","))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
