@@ -15,10 +15,12 @@ cors_origins = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://zapatos-pink.vercel.app",
+    "https://zapatos-git-main-miguel-798s-projects.vercel.app",
 ]
-# Add any additional frontend URLs from environment variable
-if os.getenv("FRONTEND_URLS"):
-    cors_origins.extend(os.getenv("FRONTEND_URLS").split(","))
+# Allow all Vercel apps
+import re
+if os.getenv("VERCEL_URL"):
+    cors_origins.append(f"https://{os.getenv('VERCEL_URL')}")
 
 app.add_middleware(
     CORSMiddleware,
