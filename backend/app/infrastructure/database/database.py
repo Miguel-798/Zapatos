@@ -3,18 +3,17 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.config import settings
 
-# Determinar URL
+# Base URL
 db_url = settings.database_url
 
-# Conexión síncrona (psycopg2) - para Alembic
-engine = create_engine(
-    db_url.replace('postgresql://', 'postgresql+psycopg2://'),
-    poolclass=NullPool
-)
+# Conexión síncrona (psycopg2)
+sync_url = db_url.replace('postgresql://', 'postgresql+psycopg2://')
+engine = create_engine(sync_url, poolclass=NullPool)
 
-# Conexión asíncrona - nullpool + statement_cache_size=0 para pgbouncer
+# Conexión asíncrona (asyncpg) - necesita postgresql+asyncpg://
+async_url = db_url.replace('postgresql://', 'postgresql+asyncpg://')
 async_engine = create_async_engine(
-    db_url,
+    async_url,
     poolclass=NullPool,
     connect_args={
         "statement_cache_size": 0,
