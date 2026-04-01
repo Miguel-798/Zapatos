@@ -236,7 +236,14 @@ class PostgresShoeRepository(ShoeRepository):
             return result.scalar() or 0
     
     async def count_low_stock(self) -> int:
-        return await self.count()
+        # Simplified - count products with stock below minimum
+        async with self._get_session() as db:
+            from app.infrastructure.database.models import shoe_sizes
+            query = select(func.count(func.distinct(shoe_sizes.c.shoe_id))).where(
+                shoe_sizes.c.stock <= 5  # Hardcoded low stock threshold
+            )
+            result = await db.execute(query)
+            return result.scalar() or 0
     
     async def count_by_category(self, category_id: UUID) -> int:
         async with self._get_session() as db:
@@ -255,6 +262,44 @@ class PostgresShoeRepository(ShoeRepository):
             )
             result = await db.execute(query)
             return result.scalar() or 0
+    
+    async def get_counts_by_category(self) -> List[dict]:
+        """Get count of shoes per category in a single query"""
+        async with self._get_session() as db:
+            query = select(
+                ShoeModel.category_id,
+                func.count(ShoeModel.id).label('count')
+            ).where(
+                ShoeModel.is_active == True,
+                ShoeModel.category_id.isnot(None)
+            ).group_by(ShoeModel.category_id)
+            
+            result = await db.execute(query)
+            rows = result.all()
+            
+            return [
+                {"category_id": str(row.category_id), "count": row.count}
+                for row in rows
+            ]
+    
+    async def get_counts_by_gender(self) -> List[dict]:
+        """Get count of shoes per gender in a single query"""
+        async with self._get_session() as db:
+            query = select(
+                ShoeModel.gender_id,
+                func.count(ShoeModel.id).label('count')
+            ).where(
+                ShoeModel.is_active == True,
+                ShoeModel.gender_id.isnot(None)
+            ).group_by(ShoeModel.gender_id)
+            
+            result = await db.execute(query)
+            rows = result.all()
+            
+            return [
+                {"gender_id": str(row.gender_id), "count": row.count}
+                for row in rows
+            ]
     
     async def get_recent(self, limit: int = 5) -> List[dict]:
         async with self._get_session() as db:
