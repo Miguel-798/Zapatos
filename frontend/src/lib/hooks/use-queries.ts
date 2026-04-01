@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { queryKeys } from './query-client'
-import { shoesApi, dashboardApi, categoriesApi, brandsApi, suppliersApi, locationsApi, colorsApi, materialsApi, sizesApi, seasonsApi, gendersApi } from './api'
+import { queryKeys } from '../query-client'
+import { shoesApi, dashboardApi, categoriesApi, brandsApi, suppliersApi, locationsApi, colorsApi, materialsApi, sizesApi, seasonsApi, gendersApi, salesApi } from '../api'
 import type { ShoeFilters, CreateShoeDTO, UpdateShoeDTO } from '@/types'
 
 // ============ SHOES ============
 
-export function useShoes(filters: ShoeFilters = {}, page = 1, limit = 20) {
+export function useShoes(filters: any = {}, page = 1, limit = 20) {
   return useQuery({
     queryKey: queryKeys.shoes(filters),
     queryFn: () => shoesApi.list(filters, page, limit),
@@ -144,6 +144,40 @@ export function useGenders() {
     queryKey: queryKeys.genders,
     queryFn: () => gendersApi.list(),
     staleTime: 1000 * 60 * 30,
+  })
+}
+
+// ============ SALES ============
+
+export function useShoesWithStock() {
+  return useQuery({
+    queryKey: queryKeys.shoesWithStock,
+    queryFn: async () => {
+      const response = await shoesApi.list({}, 1, 100)
+      return response.data.filter((shoe: any) => (shoe.stock || 0) > 0)
+    },
+    staleTime: 1000 * 60 * 2, // 2 minutes - stock changes more often
+  })
+}
+
+export function useSaleBatches(page = 1, limit = 10) {
+  return useQuery({
+    queryKey: queryKeys.saleBatches(page, limit),
+    queryFn: () => salesApi.listBatches(page, limit),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+}
+
+export function useRegisterSaleBatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (data: { items: any[]; notes?: string }) => salesApi.registerBatch(data),
+    onSuccess: () => {
+      // Invalidate shoe cache to refresh stock
+      queryClient.invalidateQueries({ queryKey: ['shoes'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.saleBatches() })
+    },
   })
 }
 

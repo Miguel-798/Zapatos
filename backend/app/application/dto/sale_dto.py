@@ -8,7 +8,7 @@ from typing import Optional
 class SaleItemDTO(BaseModel):
     """DTO for a single sale item"""
     shoe_id: UUID
-    size_id: UUID
+    size_id: Optional[UUID] = None
     quantity: int
     sale_price: Decimal
 
@@ -22,7 +22,7 @@ class CreateSaleBatchDTO(BaseModel):
 class CreateSaleDTO(BaseModel):
     """DTO for registering a single sale (legacy compatibility)"""
     shoe_id: UUID
-    size_id: UUID
+    size_id: Optional[UUID] = None
     quantity: int
     sale_price: Decimal
 

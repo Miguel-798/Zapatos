@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { categoriesApi, brandsApi, gendersApi, colorsApi, materialsApi, sizesApi, suppliersApi, locationsApi, seasonsApi } from "@/lib/api"
-import type { CreateShoeDTO, Category, Brand, Gender, Color, Material, Size, Supplier, Location, Season } from "@/types"
+import { categoriesApi, brandsApi, gendersApi, colorsApi, materialsApi, suppliersApi, locationsApi, seasonsApi } from "@/lib/api"
+import type { CreateShoeDTO, Category, Brand, Gender, Color, Material, Supplier, Location, Season } from "@/types"
 
 interface ShoeFormProps {
   onSubmit: (data: CreateShoeDTO) => Promise<void>
@@ -18,7 +18,6 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
   const [genders, setGenders] = useState<Gender[]>([])
   const [colors, setColors] = useState<Color[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
-  const [sizes, setSizes] = useState<Size[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [seasons, setSeasons] = useState<Season[]>([])
@@ -34,12 +33,12 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
     location_id: "",
     season_id: "",
     image_url: "",
+    stock: 0,
     min_stock: 5,
     price_cost: "",
     price_sale: "",
     color_ids: [] as string[],
     material_ids: [] as string[],
-    sizes: [] as { size_id: string; stock_quantity: number }[]
   })
 
   useEffect(() => {
@@ -49,17 +48,15 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
       gendersApi.list(),
       colorsApi.list(),
       materialsApi.list(),
-      sizesApi.list(),
       suppliersApi.list(),
       locationsApi.list(),
       seasonsApi.list(),
-    ]).then(([cats, brds, gnds, clrs, mtrls, szs, supps, locs, seas]) => {
+    ]).then(([cats, brds, gnds, clrs, mtrls, supps, locs, seas]) => {
       setCategories(cats)
       setBrands(brds)
       setGenders(gnds)
       setColors(clrs)
       setMaterials(mtrls)
-      setSizes(szs)
       setSuppliers(supps)
       setLocations(locs)
       setSeasons(seas)
@@ -81,12 +78,12 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
       location_id: formData.location_id || undefined,
       season_id: formData.season_id || undefined,
       image_url: formData.image_url || undefined,
+      stock: formData.stock,
       min_stock: formData.min_stock,
       price_cost: formData.price_cost ? parseFloat(formData.price_cost) : undefined,
       price_sale: formData.price_sale ? parseFloat(formData.price_sale) : undefined,
       color_ids: formData.color_ids,
       material_ids: formData.material_ids,
-      sizes: formData.sizes,
     }
     
     await onSubmit(dto)
@@ -100,22 +97,6 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
         ? prev[field].filter(i => i !== id)
         : [...prev[field], id]
     }))
-  }
-
-  const updateSizeStock = (sizeId: string, stock: number) => {
-    setFormData(prev => {
-      const existing = prev.sizes.find(s => s.size_id === sizeId)
-      if (existing) {
-        return {
-          ...prev,
-          sizes: prev.sizes.map(s => s.size_id === sizeId ? { ...s, stock_quantity: stock } : s)
-        }
-      }
-      return {
-        ...prev,
-        sizes: [...prev.sizes, { size_id: sizeId, stock_quantity: stock }]
-      }
-    })
   }
 
   return (
@@ -220,7 +201,7 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
         <CardHeader>
           <CardTitle>Precios y Stock</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="text-sm font-medium">Precio Costo</label>
             <Input type="number" step="0.01" placeholder="0.00" value={formData.price_cost} onChange={(e) => setFormData({...formData, price_cost: e.target.value})} />
@@ -228,6 +209,10 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
           <div>
             <label className="text-sm font-medium">Precio Venta</label>
             <Input type="number" step="0.01" placeholder="0.00" value={formData.price_sale} onChange={(e) => setFormData({...formData, price_sale: e.target.value})} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Stock</label>
+            <Input type="number" min="0" value={formData.stock} onChange={(e) => setFormData({...formData, stock: parseInt(e.target.value) || 0})} />
           </div>
           <div>
             <label className="text-sm font-medium">Stock Mínimo</label>
@@ -278,28 +263,6 @@ export function ShoeForm({ onSubmit }: ShoeFormProps) {
                 </Button>
               ))}
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Tallas y Stock</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-6 gap-4">
-            {sizes.map(size => (
-              <div key={size.id} className="text-center">
-                <label className="text-sm font-medium">#{size.number}</label>
-                <Input 
-                  type="number" 
-                  min="0"
-                  placeholder="0"
-                  className="mt-1"
-                  onChange={(e) => updateSizeStock(size.id, parseInt(e.target.value) || 0)}
-                />
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>

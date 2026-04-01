@@ -6,26 +6,36 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { shoesApi, categoriesApi, brandsApi, gendersApi, sizesApi, colorsApi, materialsApi } from "@/lib/api"
+import { shoesApi } from "@/lib/api"
+import { useShoes, useCategories, useBrands, useGenders, useColors, useMaterials, useCreateShoe, useUpdateShoe, useDeleteShoe } from "@/lib/hooks/use-queries"
 import { Plus, Sparkles, X, Pencil, Trash2 } from "lucide-react"
-import type { ShoeDetail, ShoeFilters as ShoeFiltersType, Category, Brand, Gender, Size, Color, Material } from "@/types"
+import type { ShoeDetail, ShoeFilters as ShoeFiltersType, Category, Brand, Gender, Color, Material } from "@/types"
 
 export default function InventoryPage() {
-  const [shoes, setShoes] = useState<ShoeDetail[]>([])
   const [filters, setFilters] = useState<ShoeFiltersType>({})
-  const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
+  
+  // Use React Query hooks for data fetching
+  const { data: shoesData, isLoading: loading } = useShoes(filters, page, 20)
+  const { data: categoriesData } = useCategories()
+  const { data: brandsData } = useBrands()
+  const { data: gendersData } = useGenders()
+  const { data: colorsData } = useColors()
+  const { data: materialsData } = useMaterials()
+  
+  const shoes = shoesData?.data || []
+  const total = shoesData?.total || 0
+  
+  // Set data from hooks
+  const categories = categoriesData || []
+  const brands = brandsData || []
+  const genders = gendersData || []
+  const colors = colorsData || []
+  const materials = materialsData || []
   
   // Modal state
   const [showModal, setShowModal] = useState(false)
   const [selectedShoe, setSelectedShoe] = useState<ShoeDetail | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [brands, setBrands] = useState<Brand[]>([])
-  const [genders, setGenders] = useState<Gender[]>([])
-  const [sizes, setSizes] = useState<Size[]>([])
-  const [colors, setColors] = useState<Color[]>([])
-  const [materials, setMaterials] = useState<Material[]>([])
   
   // Form state
   const [formData, setFormData] = useState({
@@ -37,10 +47,8 @@ export default function InventoryPage() {
     gender_id: "",
     price_cost: "",
     price_sale: "",
+    stock: "0",
   })
-  
-  // Sizes with stock - map of size_id to quantity
-  const [selectedSizes, setSelectedSizes] = useState<Record<string, number>>({})
   
   // Selected colors and materials
   const [selectedColors, setSelectedColors] = useState<string[]>([])
@@ -48,34 +56,6 @@ export default function InventoryPage() {
   
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
-
-  useEffect(() => {
-    setLoading(true)
-    shoesApi.list(filters, page, 20).then((response) => {
-      setShoes(response.data)
-      setTotal(response.total)
-      setLoading(false)
-    })
-  }, [filters, page])
-
-  useEffect(() => {
-    // Load catalog data for modal
-    Promise.all([
-      categoriesApi.list(),
-      brandsApi.list(),
-      gendersApi.list(),
-      sizesApi.list(),
-      colorsApi.list(),
-      materialsApi.list()
-    ]).then(([cats, brds, gnds, szs, cols, mats]) => {
-      setCategories(cats)
-      setBrands(brds)
-      setGenders(gnds)
-      setSizes(szs)
-      setColors(cols)
-      setMaterials(mats)
-    })
-  }, [])
 
   const handleShoeClick = (shoe: ShoeDetail) => {
     setSelectedShoe(shoe)
@@ -93,7 +73,7 @@ export default function InventoryPage() {
     price_cost: "",
     price_sale: "",
   })
-  const [editSelectedSizes, setEditSelectedSizes] = useState<Record<string, number>>({})
+  const [editSelectedSizes, setEditSelectedSizes] = useState<{ stock: number }>({ stock: 0 })
   const [editSelectedColors, setEditSelectedColors] = useState<string[]>([])
   const [editSelectedMaterials, setEditSelectedMaterials] = useState<string[]>([])
   const [updating, setUpdating] = useState(false)
@@ -111,49 +91,40 @@ export default function InventoryPage() {
       price_cost: shoe.price_cost?.toString() || "",
       price_sale: shoe.price_sale?.toString() || "",
     })
-    // Initialize sizes with current stock
-    const sizeStock: Record<string, number> = {}
-    shoe.sizes?.forEach(s => {
-      sizeStock[s.size_number.toString()] = s.stock_quantity
-    })
-    setEditSelectedSizes(sizeStock)
+    // Initialize stock from shoe
+    setEditSelectedSizes({ stock: shoe.stock || 0 })
     // Initialize colors and materials
     setEditSelectedColors([])
     setEditSelectedMaterials([])
     setShowEditModal(true)
   }
   
+  // Mutations
+  const createShoe = useCreateShoe()
+  const updateShoe = useUpdateShoe()
+  const deleteShoe = useDeleteShoe()
+  
   const handleUpdateShoe = async () => {
     if (!editingShoe || !editFormData.name.trim()) return
     
     setUpdating(true)
     try {
-      // Build sizes array - only include sizes with stock > 0
-      const sizesArray = Object.entries(editSelectedSizes)
-        .filter(([_, quantity]) => quantity > 0)
-        .map(([size_number, stock_quantity]) => ({ 
-          size_number: parseInt(size_number), 
-          stock_quantity 
-        }))
-      
-      await shoesApi.update(editingShoe.id, {
-        name: editFormData.name,
-        description: editFormData.description || undefined,
-        category_id: editFormData.category_id || undefined,
-        brand_id: editFormData.brand_id || undefined,
-        gender_id: editFormData.gender_id || undefined,
-        price_cost: editFormData.price_cost ? parseFloat(editFormData.price_cost) : undefined,
-        price_sale: editFormData.price_sale ? parseFloat(editFormData.price_sale) : undefined,
-        sizes: sizesArray,
+      await updateShoe.mutateAsync({
+        id: editingShoe.id,
+        data: {
+          name: editFormData.name,
+          description: editFormData.description || undefined,
+          category_id: editFormData.category_id || undefined,
+          brand_id: editFormData.brand_id || undefined,
+          gender_id: editFormData.gender_id || undefined,
+          price_cost: editFormData.price_cost ? parseFloat(editFormData.price_cost) : undefined,
+          price_sale: editFormData.price_sale ? parseFloat(editFormData.price_sale) : undefined,
+          stock: editSelectedSizes.stock || 0,
+        }
       })
       
       setShowEditModal(false)
       setEditingShoe(null)
-      
-      // Reload shoes
-      const response = await shoesApi.list(filters, page, 20)
-      setShoes(response.data)
-      setTotal(response.total)
     } catch (err: any) {
       console.error("Error updating shoe:", err)
       alert(err.message || "Error al actualizar el zapato")
@@ -165,11 +136,7 @@ export default function InventoryPage() {
     if (!confirm("¿Estás seguro de que deseas eliminar este producto?")) return
     
     try {
-      await shoesApi.delete(shoeId)
-      // Reload shoes
-      const response = await shoesApi.list(filters, page, 20)
-      setShoes(response.data)
-      setTotal(response.total)
+      await deleteShoe.mutateAsync(shoeId)
       setSelectedShoe(null)
     } catch (err: any) {
       console.error("Error deleting shoe:", err)
@@ -180,15 +147,10 @@ export default function InventoryPage() {
   const handleCreateShoe = async () => {
     if (!formData.name.trim()) return
     
-    // Build sizes array from selectedSizes
-    const sizesArray = Object.entries(selectedSizes)
-      .filter(([_, quantity]) => quantity > 0)
-      .map(([size_id, stock_quantity]) => ({ size_id, stock_quantity }))
-    
     setSaving(true)
     try {
-      console.log("Creating shoe with data:", formData, "sizes:", sizesArray, "colors:", selectedColors, "materials:", selectedMaterials)
-      await shoesApi.create({
+      console.log("Creating shoe with data:", formData, "colors:", selectedColors, "materials:", selectedMaterials)
+      await createShoe.mutateAsync({
         sku: "",  // Se generará automáticamente en el backend
         name: formData.name,
         description: formData.description || undefined,
@@ -197,32 +159,20 @@ export default function InventoryPage() {
         gender_id: formData.gender_id || undefined,
         price_cost: formData.price_cost ? parseFloat(formData.price_cost) : undefined,
         price_sale: formData.price_sale ? parseFloat(formData.price_sale) : undefined,
+        stock: formData.stock ? parseInt(formData.stock) : 0,
         color_ids: selectedColors,
         material_ids: selectedMaterials,
-        sizes: sizesArray,
       })
       
       // Close modal and reset form
       closeModal()
-      
-      // Reload shoes
-      const response = await shoesApi.list(filters, page, 20)
-      setShoes(response.data)
-      setTotal(response.total)
     } catch (err: any) {
       console.error("Error creating shoe:", err)
       setError(err.message || "Error al crear el zapato")
     }
     setSaving(false)
   }
-  
-  const handleSizeQuantityChange = (sizeId: string, quantity: number) => {
-    setSelectedSizes(prev => ({
-      ...prev,
-      [sizeId]: Math.max(0, quantity)
-    }))
-  }
-  
+   
   const closeModal = () => {
     setShowModal(false)
     setFormData({
@@ -234,8 +184,8 @@ export default function InventoryPage() {
       gender_id: "",
       price_cost: "",
       price_sale: "",
+      stock: "0",
     })
-    setSelectedSizes({})
     setSelectedColors([])
     setSelectedMaterials([])
     setError("")
@@ -488,41 +438,19 @@ export default function InventoryPage() {
                 )}
               </div>
               
-              {/* Sizes and Stock Section */}
+              {/* Stock Section */}
               <div className="space-y-3 pt-4 border-t">
-                <Label className="text-base font-medium">Tallas y Stock</Label>
+                <Label className="text-base font-medium">Stock</Label>
                 <p className="text-sm text-muted-foreground">
-                  Selecciona las tallas disponibles e ingresa la cantidad en stock para cada una
+                  Ingresa la cantidad total en inventario
                 </p>
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-40 overflow-y-auto p-1">
-                  {sizes.map(size => (
-                    <div 
-                      key={size.id}
-                      className={`relative p-2 rounded-lg border transition-all ${
-                        selectedSizes[size.id] > 0 
-                          ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' 
-                          : 'border-border hover:border-amber-300'
-                      }`}
-                    >
-                      <div className="text-center mb-1">
-                        <span className="text-sm font-medium">{size.number}</span>
-                      </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        className="h-8 text-center text-sm"
-                        value={selectedSizes[size.id] || ''}
-                        onChange={(e) => handleSizeQuantityChange(size.id, parseInt(e.target.value) || 0)}
-                      />
-                    </div>
-                  ))}
-                </div>
-                {sizes.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No hay tallas disponibles. Crea tallas en el catálogo primero.
-                  </p>
-                )}
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.stock}
+                  onChange={(e) => setFormData({...formData, stock: e.target.value})}
+                />
               </div>
             </div>
             
@@ -629,36 +557,18 @@ export default function InventoryPage() {
                 </div>
               )}
               
-              {/* Sizes Section */}
-              {selectedShoe.sizes && selectedShoe.sizes.length > 0 && (
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-muted-foreground mb-3">Tallas disponibles</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {selectedShoe.sizes
-                      .filter(s => s.stock_quantity > 0)
-                      .sort((a, b) => a.size_number - b.size_number)
-                      .map(size => (
-                        <div 
-                          key={size.size_number}
-                          className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
-                        >
-                          <span className="text-sm font-medium">Talla {size.size_number}</span>
-                          <span className={`text-sm font-bold ${
-                            size.stock_quantity <= 2 ? 'text-red-500' : 'text-amber-600'
-                          }`}>
-                            {size.stock_quantity}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                  <div className="mt-3 pt-3 border-t flex justify-between text-sm">
-                    <span className="text-muted-foreground">Stock total:</span>
-                    <span className="font-bold text-amber-600">
-                      {selectedShoe.sizes.reduce((sum, s) => sum + s.stock_quantity, 0)} unidades
-                    </span>
-                  </div>
+              {/* Stock Section */}
+              <div className="pt-4 border-t">
+                <p className="text-sm text-muted-foreground mb-3">Stock</p>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <span className="text-sm font-medium">Cantidad total</span>
+                  <span className={`text-lg font-bold ${
+                    (selectedShoe.stock || 0) <= 2 ? 'text-red-500' : 'text-amber-600'
+                  }`}>
+                    {selectedShoe.stock || 0} unidades
+                  </span>
                 </div>
-              )}
+              </div>
             </div>
             
             <div className="flex justify-between gap-3 p-4 sm:p-6 border-t bg-muted/30 shrink-0">
@@ -798,37 +708,17 @@ export default function InventoryPage() {
               
               {/* Stock Section */}
               <div className="space-y-3 pt-4 border-t">
-                <Label className="text-base font-medium">Stock por Talla</Label>
+                <Label className="text-base font-medium">Stock</Label>
                 <p className="text-sm text-muted-foreground">
-                  Actualiza el stock para cada talla
+                  Actualiza la cantidad total en inventario
                 </p>
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-40 overflow-y-auto p-1">
-                  {sizes.map(size => (
-                    <div 
-                      key={size.id}
-                      className={`relative p-2 rounded-lg border transition-all ${
-                        editSelectedSizes[size.number.toString()] > 0 
-                          ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' 
-                          : 'border-border hover:border-amber-300'
-                      }`}
-                    >
-                      <div className="text-center mb-1">
-                        <span className="text-sm font-medium">{size.number}</span>
-                      </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        className="h-8 text-center text-sm"
-                        value={editSelectedSizes[size.number.toString()] || ''}
-                        onChange={(e) => setEditSelectedSizes(prev => ({
-                          ...prev,
-                          [size.number.toString()]: Math.max(0, parseInt(e.target.value) || 0)
-                        }))}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editSelectedSizes.stock || 0}
+                  onChange={(e) => setEditSelectedSizes({ stock: Math.max(0, parseInt(e.target.value) || 0) })}
+                />
               </div>
             </div>
             

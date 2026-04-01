@@ -115,7 +115,8 @@ class PostgresShoeRepository(ShoeRepository):
                 location_id=dto.location_id,
                 season_id=dto.season_id,
                 image_url=dto.image_url,
-                min_stock=dto.min_stock,
+                stock=dto.stock or 0,
+                min_stock=dto.min_stock or 5,
                 price_cost=dto.price_cost,
                 price_sale=dto.price_sale,
                 is_active=True
@@ -123,21 +124,6 @@ class PostgresShoeRepository(ShoeRepository):
             db.add(shoe_model)
             await db.commit()
             await db.refresh(shoe_model)
-            
-            # Guardar tallas en shoe_sizes si existen
-            if dto.sizes and len(dto.sizes) > 0:
-                size_records = [
-                    {
-                        'shoe_id': shoe_model.id,
-                        'size_id': size.size_id,
-                        'stock_quantity': size.stock_quantity
-                    }
-                    for size in dto.sizes
-                    if size.stock_quantity > 0
-                ]
-                if size_records:
-                    await db.execute(insert(shoe_sizes_table).values(size_records))
-                    await db.commit()
             
             # Guardar colores si existen
             if dto.color_ids and len(dto.color_ids) > 0:
@@ -168,42 +154,14 @@ class PostgresShoeRepository(ShoeRepository):
             if not shoe:
                 return None
             
-            # Update fields from DTO (exclude sizes)
-            update_data = dto.model_dump(exclude_unset=True, exclude={'sizes'})
+            # Update fields from DTO
+            update_data = dto.model_dump(exclude_unset=True)
             for key, value in update_data.items():
                 if value is not None:
                     setattr(shoe, key, value)
             
             await db.commit()
             await db.refresh(shoe)
-            
-            # Update sizes if provided
-            if dto.sizes and len(dto.sizes) > 0:
-                # Delete existing sizes
-                await db.execute(
-                    shoe_sizes_table.delete().where(shoe_sizes_table.c.shoe_id == id)
-                )
-                
-                # Get size IDs by number
-                from app.infrastructure.database.models import SizeModel
-                size_records = []
-                for size in dto.sizes:
-                    if size.stock_quantity > 0:
-                        # Find size by number (size_number is an int)
-                        size_query = select(SizeModel.id).where(SizeModel.number == int(size.size_number))
-                        size_result = await db.execute(size_query)
-                        size_id = size_result.scalar_one_or_none()
-                        if size_id:
-                            size_records.append({
-                                'shoe_id': id,
-                                'size_id': size_id,
-                                'stock_quantity': size.stock_quantity
-                            })
-                
-                if size_records:
-                    await db.execute(insert(shoe_sizes_table).values(size_records))
-                
-                await db.commit()
             
             return self._to_entity(shoe)
     

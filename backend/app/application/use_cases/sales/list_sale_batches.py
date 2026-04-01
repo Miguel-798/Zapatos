@@ -46,18 +46,25 @@ class ListSaleBatchesUseCase:
                     shoe_name = shoe_row[0] if shoe_row else "Unknown"
                     shoe_sku = shoe_row[1] if shoe_row else "N/A"
                     
-                    # Get size number
-                    size_query = select(SizeModel.number).where(SizeModel.id == item.size_id)
-                    size_result = await db.execute(size_query)
-                    size_row = size_result.fetchone()
-                    size_number = size_row[0] if size_row else 0
+                    # Get size number (may be None for simple stock)
+                    size_id = item.size_id
+                    size_number = 0
+                    if size_id:
+                        size_query = select(SizeModel.number).where(SizeModel.id == size_id)
+                        size_result = await db.execute(size_query)
+                        size_row = size_result.fetchone()
+                        size_number = size_row[0] if size_row else 0
+                    
+                    # Use placeholder UUID if size_id is None
+                    from uuid import UUID
+                    placeholder_uuid = UUID('00000000-0000-0000-0000-000000000000')
                     
                     items_dto.append(SaleWithDetailsDTO(
                         id=item.id,
                         shoe_id=item.shoe_id,
                         shoe_name=shoe_name,
                         shoe_sku=shoe_sku,
-                        size_id=item.size_id,
+                        size_id=size_id or placeholder_uuid,
                         size_number=size_number,
                         quantity=item.quantity,
                         sale_price=item.sale_price,

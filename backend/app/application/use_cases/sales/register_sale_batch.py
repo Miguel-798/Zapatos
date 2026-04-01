@@ -6,7 +6,7 @@ import string
 from app.application.dto.sale_dto import CreateSaleBatchDTO, SaleBatchResponseDTO, SaleWithDetailsDTO
 from sqlalchemy import select
 from app.infrastructure.database.database import AsyncSessionLocal
-from app.infrastructure.database.models import SaleModel, SaleBatchModel, ShoeModel, SizeModel, shoe_sizes as shoe_sizes_table
+from app.infrastructure.database.models import SaleModel, SaleBatchModel, ShoeModel
 
 
 class RegisterSaleBatchUseCase:
@@ -20,23 +20,22 @@ class RegisterSaleBatchUseCase:
         invoice_number = self._generate_invoice_number()
         
         async with AsyncSessionLocal() as db:
-            # First, validate all items have sufficient stock
+            # First, validate all items have sufficient stock (using new stock field)
             for item in dto.items:
                 stock_query = select(
-                    shoe_sizes_table.c.stock_quantity
+                    ShoeModel.stock
                 ).where(
-                    shoe_sizes_table.c.shoe_id == item.shoe_id,
-                    shoe_sizes_table.c.size_id == item.size_id
+                    ShoeModel.id == item.shoe_id
                 )
                 result = await db.execute(stock_query)
                 row = result.fetchone()
                 
                 if not row:
-                    raise ValueError(f"Combinación zapato/talla no encontrada")
+                    raise ValueError(f"Producto no encontrado")
                 
                 current_stock = row[0]
                 if current_stock < item.quantity:
-                    raise ValueError(f"Stock insuficiente para {item.shoe_id}: disponible {current_stock}, solicitado {item.quantity}")
+                    raise ValueError(f"Stock insuficiente: disponible {current_stock}, solicitado {item.quantity}")
             
             # All validations passed, now create the batch and items
             from uuid import uuid4
@@ -56,7 +55,7 @@ class RegisterSaleBatchUseCase:
             total_amount = Decimal('0')
             items_response = []
             
-            # Create each sale item and reduce stock
+            # Create each sale item and reduce stock (using simple stock field)
             for item in dto.items:
                 item_id = uuid4()
                 subtotal = Decimal(str(item.sale_price)) * item.quantity
@@ -66,7 +65,7 @@ class RegisterSaleBatchUseCase:
                     id=item_id,
                     batch_id=batch_id,
                     shoe_id=item.shoe_id,
-                    size_id=item.size_id,
+                    size_id=item.size_id,  # Keep for compatibility
                     quantity=item.quantity,
                     sale_price=item.sale_price,
                     subtotal=subtotal,
@@ -75,14 +74,11 @@ class RegisterSaleBatchUseCase:
                 )
                 db.add(sale)
                 
-                # Reduce stock
+                # Reduce stock using the simple stock field
                 await db.execute(
-                    shoe_sizes_table.update()
-                    .where(
-                        shoe_sizes_table.c.shoe_id == item.shoe_id,
-                        shoe_sizes_table.c.size_id == item.size_id
-                    )
-                    .values(stock_quantity=shoe_sizes_table.c.stock_quantity - item.quantity)
+                    ShoeModel.__table__.update()
+                    .where(ShoeModel.id == item.shoe_id)
+                    .values(stock=ShoeModel.stock - item.quantity)
                 )
                 
                 # Get shoe info for response
@@ -92,19 +88,16 @@ class RegisterSaleBatchUseCase:
                 shoe_name = shoe_row[0] if shoe_row else "Unknown"
                 shoe_sku = shoe_row[1] if shoe_row else "N/A"
                 
-                # Get size number
-                size_query = select(SizeModel.number).where(SizeModel.id == item.size_id)
-                size_result = await db.execute(size_query)
-                size_row = size_result.fetchone()
-                size_number = size_row[0] if size_row else 0
+                # Use size_id provided or generate a placeholder for compatibility
+                size_id = item.size_id if hasattr(item, 'size_id') and item.size_id else UUID('00000000-0000-0000-0000-000000000000')
                 
                 items_response.append(SaleWithDetailsDTO(
                     id=item_id,
                     shoe_id=item.shoe_id,
                     shoe_name=shoe_name,
                     shoe_sku=shoe_sku,
-                    size_id=item.size_id,
-                    size_number=size_number,
+                    size_id=size_id,
+                    size_number=0,  # No longer tracking per-size
                     quantity=item.quantity,
                     sale_price=item.sale_price,
                     subtotal=subtotal,

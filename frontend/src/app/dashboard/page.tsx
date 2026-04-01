@@ -1,27 +1,17 @@
 "use client"
-import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { dashboardApi } from "@/lib/api"
+import { useDashboardSummary, useLowStock } from "@/lib/hooks/use-queries"
 import { Package, AlertTriangle, TrendingUp, Clock, ArrowRight, Sparkles } from "lucide-react"
-import type { DashboardSummary, LowStockShoe } from "@/types"
+import type { LowStockShoe } from "@/types"
 import Link from "next/link"
 
 export default function DashboardPage() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [lowStock, setLowStock] = useState<LowStockShoe[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    Promise.all([
-      dashboardApi.getSummary(),
-      dashboardApi.getLowStock()
-    ]).then(([sum, low]) => {
-      setSummary(sum)
-      setLowStock(low)
-      setLoading(false)
-    })
-  }, [])
+  const { data: summary, isLoading: summaryLoading } = useDashboardSummary()
+  const { data: lowStockData, isLoading: lowStockLoading } = useLowStock()
+  
+  const loading = summaryLoading || lowStockLoading
+  const lowStock = lowStockData || []
 
   if (loading) {
     return (

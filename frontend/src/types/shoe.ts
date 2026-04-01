@@ -10,6 +10,7 @@ export interface Shoe {
   location_id?: string;
   season_id?: string;
   image_url?: string;
+  stock: number;
   min_stock: number;
   price_cost?: number;
   price_sale?: number;
@@ -27,7 +28,6 @@ export interface ShoeDetail extends Shoe {
   season_name?: string;
   colors: string[];
   materials: string[];
-  sizes?: { size_id?: string; size_number: number; stock_quantity: number }[];
 }
 
 export interface CreateShoeDTO {
@@ -41,12 +41,12 @@ export interface CreateShoeDTO {
   location_id?: string;
   season_id?: string;
   image_url?: string;
+  stock?: number;
   min_stock?: number;
   price_cost?: number;
   price_sale?: number;
   color_ids: string[];
   material_ids: string[];
-  sizes: { size_id: string; stock_quantity: number }[];
 }
 
 export interface UpdateShoeDTO {
@@ -60,11 +60,11 @@ export interface UpdateShoeDTO {
   location_id?: string;
   season_id?: string;
   image_url?: string;
+  stock?: number;
   min_stock?: number;
   price_cost?: number;
   price_sale?: number;
   is_active?: boolean;
-  sizes?: { size_number: number; stock_quantity: number }[];
 }
 
 export interface ShoeFilters {

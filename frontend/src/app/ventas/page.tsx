@@ -1,31 +1,35 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { salesApi, shoesApi } from "@/lib/api"
-import { CreateSaleDTO, SaleWithDetails, ShoeDetail, SaleBatch, SaleBatchItem } from "@/types"
+import { useState } from "react"
+import { ShoeDetail } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
+import { useShoesWithStock, useSaleBatches, useRegisterSaleBatch } from "@/lib/hooks/use-queries"
 import { Loader2, ShoppingCart, Package, DollarSign, Trash2, Search, Plus, X } from "lucide-react"
 
 interface CartItem {
   shoe_id: string
-  size_id: string
-  size_number: number
   shoe_name: string
   shoe_sku: string
   quantity: number
-  stock_quantity: number
+  stock_available: number
   sale_price: number
 }
 
 export default function VentasPage() {
   const { toast } = useToast()
   
-  const [shoes, setShoes] = useState<ShoeDetail[]>([])
-  const [loading, setLoading] = useState(true)
+  // Use React Query hooks
+  const { data: shoesData, isLoading: loading } = useShoesWithStock()
+  const { data: batchesData, isLoading: batchesLoading } = useSaleBatches(1, 10)
+  const registerSale = useRegisterSaleBatch()
+  
+  const shoes = shoesData || []
+  const salesBatches = batchesData?.data || []
+  
   const [submitting, setSubmitting] = useState(false)
   
   // Search
@@ -34,15 +38,12 @@ export default function VentasPage() {
   // Cart
   const [cart, setCart] = useState<CartItem[]>([])
   
-  // Sales batches (invoices)
-  const [salesBatches, setSalesBatches] = useState<SaleBatch[]>([])
-  const [batchesLoading, setBatchesLoading] = useState(true)
+  // Expanded batch details
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null)
   
   // Product selection modal
   const [showProductSelect, setShowProductSelect] = useState(false)
   const [selectedShoe, setSelectedShoe] = useState<ShoeDetail | null>(null)
-  const [selectedSize, setSelectedSize] = useState<number | null>(null)
   const [quantity, setQuantity] = useState<number>(1)
   const [customPrice, setCustomPrice] = useState<string>("")
   
@@ -67,41 +68,7 @@ export default function VentasPage() {
       timeStyle: 'short'
     })
   }
-  
-  // Load shoes
-  useEffect(() => {
-    const loadShoes = async () => {
-      try {
-        const response = await shoesApi.list({}, 1, 100)
-        // Filter shoes with stock > 0
-        const shoesWithStock = response.data.filter(
-          shoe => shoe.sizes && shoe.sizes.some(s => s.stock_quantity > 0)
-        )
-        setShoes(shoesWithStock)
-      } catch (error) {
-        console.error("Error loading shoes:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadShoes()
-  }, [])
-  
-  // Load sales batches
-  useEffect(() => {
-    const loadBatches = async () => {
-      try {
-        const response = await salesApi.listBatches(1, 10)
-        setSalesBatches(response.data)
-      } catch (error) {
-        console.error("Error loading batches:", error)
-      } finally {
-        setBatchesLoading(false)
-      }
-    }
-    loadBatches()
-  }, [])
-  
+
   // Filtered shoes by search
   const filteredShoes = shoes.filter(shoe => {
     if (!searchQuery) return true
@@ -111,8 +78,8 @@ export default function VentasPage() {
            (shoe.brand_name && shoe.brand_name.toLowerCase().includes(query))
   })
   
-  // Get available sizes for selected shoe
-  const availableSizes = selectedShoe?.sizes?.filter(s => s.stock_quantity > 0) || []
+  // Get available stock for selected shoe
+  const availableStock = (selectedShoe?.stock || 0)
   
   // Calculate cart total
   const cartTotal = cart.reduce((sum, item) => sum + (item.sale_price * item.quantity), 0)
@@ -120,23 +87,21 @@ export default function VentasPage() {
   
   // Add to cart
   const handleAddToCart = () => {
-    if (!selectedShoe || !selectedSize) {
+    if (!selectedShoe) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Selecciona un producto y talla",
+        description: "Selecciona un producto",
       })
       return
     }
     
-    const sizeInfo = selectedShoe.sizes?.find(s => s.size_number === selectedSize)
-    if (!sizeInfo || !sizeInfo.size_id) return
-    
     const price = customPrice ? parseFloat(customPrice) : (selectedShoe.price_sale || 0)
+    const available = selectedShoe.stock || 0
     
     // Check if already in cart
     const existingIndex = cart.findIndex(
-      item => item.shoe_id === selectedShoe.id && item.size_id === sizeInfo.size_id
+      item => item.shoe_id === selectedShoe.id
     )
     
     if (existingIndex >= 0) {
@@ -148,22 +113,24 @@ export default function VentasPage() {
       // Add new item
       setCart([...cart, {
         shoe_id: selectedShoe.id,
-        size_id: sizeInfo.size_id,
-        size_number: selectedSize,
         shoe_name: selectedShoe.name,
         shoe_sku: selectedShoe.sku,
-        quantity,
-        stock_quantity: sizeInfo.stock_quantity,
-        sale_price: price,
+        quantity: quantity,
+        stock_available: available,
+        sale_price: price
       }])
     }
     
     // Reset selection
     setSelectedShoe(null)
-    setSelectedSize(null)
     setQuantity(1)
     setCustomPrice("")
     setShowProductSelect(false)
+    
+    toast({
+      title: "Agregado al carrito",
+      description: `${selectedShoe.name} x${quantity}`,
+    })
   }
   
   // Remove from cart
@@ -171,50 +138,39 @@ export default function VentasPage() {
     setCart(cart.filter((_, i) => i !== index))
   }
   
+  // Update cart item quantity
+  const handleUpdateQuantity = (index: number, newQuantity: number) => {
+    if (newQuantity < 1) return
+    const newCart = [...cart]
+    newCart[index].quantity = newQuantity
+    setCart(newCart)
+  }
+  
   // Submit sale
   const handleSubmitSale = async () => {
-    if (cart.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Agrega productos al carrito",
-      })
-      return
-    }
+    if (cart.length === 0) return
     
     setSubmitting(true)
-    
     try {
+      // Register batch of sales
       const items = cart.map(item => ({
         shoe_id: item.shoe_id,
-        size_id: item.size_id,
         quantity: item.quantity,
         sale_price: item.sale_price,
       }))
       
-      const result = await salesApi.registerBatch({ items })
+      await registerSale.mutateAsync({ items })
       
       toast({
         title: "Venta registrada",
-        description: `${result.invoice_number} - ${formatCOP(result.total_amount)}`,
-        className: "bg-green-50 border-green-200",
+        description: `${cart.length} productos vendidos`,
       })
       
       // Clear cart
       setCart([])
       
-      // Reload batches
-      const response = await salesApi.listBatches(1, 10)
-      setSalesBatches(response.data)
-      
-      // Reload shoes to update stock
-      const shoesResponse = await shoesApi.list({}, 1, 100)
-      const shoesWithStock = shoesResponse.data.filter(
-        shoe => shoe.sizes && shoe.sizes.some(s => s.stock_quantity > 0)
-      )
-      setShoes(shoesWithStock)
-      
     } catch (error: any) {
+      console.error("Error registering sale:", error)
       toast({
         variant: "destructive",
         title: "Error",
@@ -232,186 +188,215 @@ export default function VentasPage() {
       </div>
     )
   }
-  
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <ShoppingCart className="w-6 h-6 text-amber-600" />
-        <h1 className="text-2xl font-serif">Punto de Venta</h1>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Cart / New Sale */}
-        <div className="space-y-4">
-          {/* Cart */}
-          <Card className="border-amber-200 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-amber-50 to-transparent border-b">
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5" />
-                  Carrito de Venta
-                </span>
-                {cart.length > 0 && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {cartItemsCount} productos
-                  </span>
-                )}
+    <div className="container mx-auto py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Product Selection & Cart */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Product Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Seleccionar Producto
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4">
-              {/* Add Product Button */}
-              <Button 
-                onClick={() => setShowProductSelect(true)}
-                className="w-full mb-4 bg-amber-600 hover:bg-amber-700"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Agregar Producto
-              </Button>
+            <CardContent>
+              {/* Search */}
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nombre, SKU o marca..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
               
-              {/* Cart Items */}
+              {/* Product Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                {filteredShoes.map(shoe => (
+                  <button
+                    key={shoe.id}
+                    onClick={() => {
+                      setSelectedShoe(shoe)
+                      setShowProductSelect(true)
+                    }}
+                    className={`p-3 rounded-lg border text-left transition-all hover:border-amber-500 ${
+                      selectedShoe?.id === shoe.id ? 'border-amber-500 bg-amber-50' : 'border-border'
+                    }`}
+                  >
+                    <p className="font-medium text-sm truncate">{shoe.name}</p>
+                    <p className="text-xs text-muted-foreground">{shoe.sku}</p>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-sm font-bold text-amber-600">
+                        {formatCOP(shoe.price_sale || 0)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Stock: {shoe.stock || 0}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              
+              {filteredShoes.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">
+                  No hay productos disponibles
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* Cart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Carrito de Ventas
+                <span className="ml-auto text-sm font-normal text-muted-foreground">
+                  {cartItemsCount} items
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               {cart.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                  <p>No hay productos en el carrito</p>
-                  <p className="text-sm">Agrega productos para comenzar una venta</p>
-                </div>
+                <p className="text-center text-muted-foreground py-8">
+                  El carrito está vacío
+                </p>
               ) : (
                 <div className="space-y-3">
                   {cart.map((item, index) => (
-                    <div 
-                      key={index}
-                      className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-100"
-                    >
+                    <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                       <div className="flex-1">
-                        <p className="font-medium text-sm">{item.shoe_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Talla {item.size_number} × {item.quantity}
+                        <p className="font-medium">{item.shoe_name}</p>
+                        <p className="text-sm text-muted-foreground">{item.shoe_sku}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Disponible: {item.stock_available}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-bold text-amber-700">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleUpdateQuantity(index, item.quantity - 1)}
+                            disabled={item.quantity <= 1}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                          <span className="w-8 text-center">{item.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleUpdateQuantity(index, item.quantity + 1)}
+                            disabled={item.quantity >= item.stock_available}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <span className="font-bold text-amber-600 w-24 text-right">
                           {formatCOP(item.sale_price * item.quantity)}
                         </span>
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500"
                           onClick={() => handleRemoveFromCart(index)}
-                          className="p-1 hover:bg-red-100 rounded"
                         >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </button>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
                   
-                  {/* Total */}
-                  {cart.length > 0 && (
-                    <div className="pt-4 border-t border-amber-200">
-                      <div className="flex justify-between items-center">
-                        <span className="text-lg font-medium">Total:</span>
-                        <span className="text-2xl font-bold text-amber-700">
-                          {formatCOP(cartTotal)}
-                        </span>
-                      </div>
-                      
-                      <Button 
-                        onClick={handleSubmitSale}
-                        disabled={submitting}
-                        className="w-full mt-4 bg-green-600 hover:bg-green-700"
-                      >
-                        {submitting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Procesando...
-                          </>
-                        ) : (
-                          <>
-                            <DollarSign className="h-4 w-4 mr-2" />
-                            Registrar Venta
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <span className="font-medium">Total:</span>
+                    <span className="text-2xl font-bold text-amber-600">
+                      {formatCOP(cartTotal)}
+                    </span>
+                  </div>
+                  
+                  <Button
+                    className="w-full mt-4 bg-amber-600 hover:bg-amber-700"
+                    onClick={handleSubmitSale}
+                    disabled={submitting || cart.length === 0}
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <DollarSign className="h-4 w-4 mr-2" />
+                    )}
+                    Registrar Venta
+                  </Button>
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
         
-        {/* Right: Sales History */}
-        <div className="space-y-4">
-          <Card className="border-green-200 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-green-50 to-transparent border-b">
+        {/* Right Column - Sales History */}
+        <div>
+          <Card>
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-green-600" />
+                <Package className="h-5 w-5" />
                 Historial de Ventas
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent>
               {batchesLoading ? (
-                <div className="text-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-amber-600" />
                 </div>
               ) : salesBatches.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                  <p>No hay ventas registradas</p>
-                </div>
+                <p className="text-center text-muted-foreground py-8">
+                  No hay ventas registradas
+                </p>
               ) : (
-                <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                  {salesBatches.map((batch) => (
-                    <div key={batch.batch_id}>
-                      <div 
-                        className="p-3 rounded-lg bg-green-50 border border-green-100 cursor-pointer hover:bg-green-100 transition-colors"
-                        onClick={() => setExpandedBatchId(expandedBatchId === batch.batch_id ? null : batch.batch_id)}
+                <div className="space-y-3">
+                  {salesBatches.map(batch => (
+                    <div key={batch.batch_id} className="border rounded-lg overflow-hidden">
+                      <button
+                        className="w-full p-3 text-left hover:bg-muted/50 flex justify-between items-center"
+                        onClick={() => setExpandedBatchId(
+                          expandedBatchId === batch.batch_id ? null : batch.batch_id
+                        )}
                       >
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-medium text-sm">{batch.invoice_number}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(batch.sale_date)}
-                            </p>
-                          </div>
-                          <span className="font-bold text-green-700">
-                            {formatCOP(batch.total_amount)}
-                          </span>
+                        <div>
+                          <p className="font-medium">{batch.invoice_number}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(batch.sale_date)}
+                          </p>
                         </div>
-                        <div className="text-xs text-muted-foreground flex items-center justify-between">
-                          <span>{batch.items.length} producto(s)</span>
-                          <span className="text-green-600">
-                            {expandedBatchId === batch.batch_id ? '▲ Ocultar' : '▼ Ver detalles'}
-                          </span>
-                        </div>
-                      </div>
+                        <span className="font-bold text-amber-600">
+                          {formatCOP(batch.total_amount)}
+                        </span>
+                      </button>
                       
-                      {/* Expanded Items */}
+                      {/* Expanded Details */}
                       {expandedBatchId === batch.batch_id && batch.items && (
-                        <div className="mt-2 p-3 bg-white rounded-lg border border-green-200">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-left text-muted-foreground border-b">
-                                <th className="pb-2 font-medium">Producto</th>
-                                <th className="pb-2 font-medium">Talla</th>
-                                <th className="pb-2 font-medium text-right">Cant.</th>
-                                <th className="pb-2 font-medium text-right">Precio</th>
-                                <th className="pb-2 font-medium text-right">Subtotal</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {batch.items.map((item, idx) => (
-                                <tr key={idx} className="border-b last:border-0">
-                                  <td className="py-2">
-                                    <p className="font-medium">{item.shoe_name}</p>
-                                    <p className="text-xs text-muted-foreground">{item.shoe_sku}</p>
-                                  </td>
-                                  <td className="py-2">{item.size_number}</td>
-                                  <td className="py-2 text-right">{item.quantity}</td>
-                                  <td className="py-2 text-right">{formatCOP(item.sale_price)}</td>
-                                  <td className="py-2 text-right font-medium">{formatCOP(item.subtotal)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <div className="p-3 border-t bg-muted/30">
+                          <p className="text-sm font-medium mb-2">Detalles:</p>
+                          <div className="space-y-2">
+                            {batch.items.map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <div>
+                                  <span className="font-medium">{item.shoe_name}</span>
+                                  <span className="text-muted-foreground"> x{item.quantity}</span>
+                                </div>
+                                <span className="font-medium">{formatCOP(item.subtotal)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {batch.notes && batch.notes.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Nota: {batch.notes}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -424,15 +409,15 @@ export default function VentasPage() {
       </div>
       
       {/* Product Selection Modal */}
-      {showProductSelect && (
+      {showProductSelect && selectedShoe && (
         <>
           <div 
             className="fixed inset-0 z-50 bg-black/60"
             onClick={() => setShowProductSelect(false)}
           />
-          <div className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:-translate-y-1/2 sm:left-1/2 sm:-translate-x-1/2 z-50 w-full sm:max-w-lg bg-background rounded-xl shadow-2xl border flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b shrink-0">
-              <h2 className="text-lg font-semibold">Agregar Producto</h2>
+          <div className="fixed inset-0 sm:inset-auto sm:top-1/2 sm:-translate-y-1/2 sm:left-1/2 sm:-translate-x-1/2 z-50 w-full sm:max-w-md bg-background rounded-xl shadow-2xl border p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Agregar al Carrito</h3>
               <button 
                 onClick={() => setShowProductSelect(false)}
                 className="p-2 hover:bg-accent rounded-lg"
@@ -441,110 +426,50 @@ export default function VentasPage() {
               </button>
             </div>
             
-            <div className="p-4 space-y-4 overflow-y-auto flex-1">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nombre, SKU o marca..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Producto</p>
+                <p className="font-medium">{selectedShoe.name}</p>
+                <p className="text-sm text-muted-foreground">SKU: {selectedShoe.sku}</p>
               </div>
               
-              {/* Product List */}
-              <div className="space-y-2 max-h-[250px] overflow-y-auto">
-                {filteredShoes.length === 0 ? (
-                  <p className="text-center py-4 text-muted-foreground">
-                    No se encontraron productos
-                  </p>
-                ) : (
-                  filteredShoes.map(shoe => (
-                    <button
-                      key={shoe.id}
-                      onClick={() => {
-                        setSelectedShoe(shoe)
-                        setSelectedSize(null)
-                        setCustomPrice(shoe.price_sale?.toString() || "")
-                      }}
-                      className={`w-full p-3 rounded-lg border text-left transition-all ${
-                        selectedShoe?.id === shoe.id
-                          ? 'border-amber-500 bg-amber-50'
-                          : 'hover:border-amber-300 hover:bg-amber-50/50'
-                      }`}
-                    >
-                      <p className="font-medium">{shoe.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {shoe.sku} • {shoe.brand_name || 'Sin marca'}
-                      </p>
-                      {shoe.price_sale && (
-                        <p className="text-sm font-medium text-amber-700 mt-1">
-                          {formatCOP(shoe.price_sale)}
-                        </p>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-              
-              {/* Size & Quantity Selection */}
-              {selectedShoe && (
-                <div className="space-y-4 pt-4 border-t">
-                  <div>
-                    <Label>Talla</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {availableSizes.map(size => (
-                        <button
-                          key={size.size_number}
-                          onClick={() => setSelectedSize(size.size_number)}
-                          className={`px-3 py-1.5 rounded-md border text-sm transition-all ${
-                            selectedSize === size.size_number
-                              ? 'border-amber-500 bg-amber-50 text-amber-700'
-                              : 'hover:border-amber-300'
-                          }`}
-                        >
-                          {size.size_number} ({size.stock_quantity})
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Cantidad</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        max={selectedSize ? availableSizes.find(s => s.size_number === selectedSize)?.stock_quantity : 1}
-                        value={quantity}
-                        onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      />
-                    </div>
-                    <div>
-                      <Label>Precio Unit.</Label>
-                      <Input
-                        type="number"
-                        value={customPrice}
-                        onChange={(e) => setCustomPrice(e.target.value)}
-                        placeholder={selectedShoe.price_sale?.toString() || "0"}
-                      />
-                    </div>
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Precio</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder={selectedShoe.price_sale?.toString() || "0"}
+                    value={customPrice}
+                    onChange={(e) => setCustomPrice(e.target.value)}
+                  />
                 </div>
-              )}
-            </div>
-            
-            <div className="flex justify-end gap-3 p-4 border-t bg-muted/30 shrink-0">
-              <Button variant="outline" onClick={() => setShowProductSelect(false)}>
-                Cancelar
-              </Button>
-              <Button 
+                <div>
+                  <Label>Cantidad (Stock: {availableStock})</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max={availableStock}
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.min(availableStock, parseInt(e.target.value) || 1))}
+                  />
+                </div>
+              </div>
+              
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Subtotal:</span>
+                  <span className="text-xl font-bold text-amber-600">
+                    {formatCOP((customPrice ? parseFloat(customPrice) : (selectedShoe.price_sale || 0)) * quantity)}
+                  </span>
+                </div>
+              </div>
+              
+              <Button
+                className="w-full bg-amber-600 hover:bg-amber-700"
                 onClick={handleAddToCart}
-                disabled={!selectedShoe || !selectedSize}
-                className="bg-amber-600 hover:bg-amber-700"
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <ShoppingCart className="h-4 w-4 mr-2" />
                 Agregar al Carrito
               </Button>
             </div>

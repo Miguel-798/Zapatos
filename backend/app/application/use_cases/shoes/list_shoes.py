@@ -1,13 +1,12 @@
-from app.application.dto.shoe_dto import ShoeFiltersDTO, ShoeListResponseDTO, ShoeDetailDTO, ShoeSizeOutputDTO
-from app.infrastructure.database.models import shoe_colors, shoe_materials
+from app.application.dto.shoe_dto import ShoeFiltersDTO, ShoeListResponseDTO, ShoeDetailDTO
 from app.domain.repositories.interfaces import ShoeRepository
 from sqlalchemy import select
 from app.infrastructure.database.database import AsyncSessionLocal
-from app.infrastructure.database.models import shoe_sizes as shoe_sizes_table, SizeModel, shoe_colors, shoe_materials, ColorModel, MaterialModel, BrandModel, CategoryModel, GenderModel
+from app.infrastructure.database.models import ShoeModel, shoe_colors as shoe_colors_table, shoe_materials as shoe_materials_table, ColorModel, MaterialModel, BrandModel, CategoryModel, GenderModel
 
 
 class ListShoesUseCase:
-    """Use case for listing shoes with filters and pagination"""
+    """Use case for listing shoes with filters and pagination - OPTIMIZED FOR NETWORK LATENCY"""
     
     def __init__(self, shoe_repository: ShoeRepository):
         self.shoe_repository = shoe_repository
@@ -15,145 +14,167 @@ class ListShoesUseCase:
     async def execute(self, filters: ShoeFiltersDTO) -> ShoeListResponseDTO:
         offset = (filters.page - 1) * filters.limit
         
-        shoes, total = await self.shoe_repository.get_all(
-            category_id=filters.category_id,
-            brand_id=filters.brand_id,
-            gender_id=filters.gender_id,
-            color_id=filters.color_id,
-            material_id=filters.material_id,
-            size_id=filters.size_id,
-            search=filters.search,
-            low_stock=filters.low_stock,
-            limit=filters.limit,
-            offset=offset
-        )
-        
-        # Convertir entidades Shoe a ShoeDetailDTO con tallas
-        shoes_dto = []
-        for shoe in shoes:
-            # Fetch sizes, colors, materials, and names for this shoe
-            sizes_data = await self._get_shoe_sizes(shoe.id)
-            colors_data = await self._get_shoe_colors(shoe.id)
-            materials_data = await self._get_shoe_materials(shoe.id)
-            brand_name = await self._get_brand_name(shoe.brand_id)
-            category_name = await self._get_category_name(shoe.category_id)
-            gender_name = await self._get_gender_name(shoe.gender_id)
-            
-            dto = ShoeDetailDTO(
-                id=shoe.id,
-                sku=shoe.sku,
-                name=shoe.name,
-                description=shoe.description,
-                category_id=shoe.category_id,
-                brand_id=shoe.brand_id,
-                gender_id=shoe.gender_id,
-                supplier_id=shoe.supplier_id,
-                location_id=shoe.location_id,
-                season_id=shoe.season_id,
-                image_url=shoe.image_url,
-                min_stock=shoe.min_stock,
-                price_cost=shoe.price_cost,
-                price_sale=shoe.price_sale,
-                is_active=shoe.is_active,
-                category_name=category_name,
-                brand_name=brand_name,
-                gender_name=gender_name,
-                supplier_name=None,
-                location_name=None,
-                season_name=None,
-                colors=colors_data,
-                materials=materials_data,
-                sizes=[ShoeSizeOutputDTO(**s) for s in sizes_data]
-            )
-            shoes_dto.append(dto)
-        
-        return ShoeListResponseDTO(
-            data=shoes_dto,
-            total=total,
-            page=filters.page,
-            limit=filters.limit
-        )
-    
-    async def _get_shoe_sizes(self, shoe_id):
-        """Fetch sizes with stock quantity for a shoe"""
+        # Use a single session for all queries to reduce connection overhead
         async with AsyncSessionLocal() as db:
-            # Join shoe_sizes with sizes to get the size number and id
-            query = select(
-                SizeModel.id,
-                SizeModel.number,
-                shoe_sizes_table.c.stock_quantity
-            ).join(
-                SizeModel, SizeModel.id == shoe_sizes_table.c.size_id
-            ).where(
-                shoe_sizes_table.c.shoe_id == shoe_id
-            )
+            # Build base query
+            from sqlalchemy import func, or_
             
+            query = select(ShoeModel).where(ShoeModel.is_active == True)
+            count_query = select(func.count(ShoeModel.id)).where(ShoeModel.is_active == True)
+            
+            # Apply filters
+            if filters.category_id:
+                query = query.where(ShoeModel.category_id == filters.category_id)
+                count_query = count_query.where(ShoeModel.category_id == filters.category_id)
+            if filters.brand_id:
+                query = query.where(ShoeModel.brand_id == filters.brand_id)
+                count_query = count_query.where(ShoeModel.brand_id == filters.brand_id)
+            if filters.gender_id:
+                query = query.where(ShoeModel.gender_id == filters.gender_id)
+                count_query = count_query.where(ShoeModel.gender_id == filters.gender_id)
+            
+            # Color filter
+            if filters.color_id:
+                from app.infrastructure.database.models import shoe_colors
+                query = query.join(shoe_colors).where(shoe_colors.c.color_id == filters.color_id)
+                count_query = count_query.join(shoe_colors).where(shoe_colors.c.color_id == filters.color_id)
+            
+            # Material filter
+            if filters.material_id:
+                from app.infrastructure.database.models import shoe_materials
+                query = query.join(shoe_materials).where(shoe_materials.c.material_id == filters.material_id)
+                count_query = count_query.join(shoe_materials).where(shoe_materials.c.material_id == filters.material_id)
+            
+            # Search filter
+            if filters.search:
+                search_filter = or_(
+                    ShoeModel.name.ilike(f'%{filters.search}%'),
+                    ShoeModel.sku.ilike(f'%{filters.search}%')
+                )
+                query = query.where(search_filter)
+                count_query = count_query.where(search_filter)
+            
+            # Low stock filter
+            if filters.low_stock:
+                from app.infrastructure.database.models import shoe_sizes
+                query = query.join(shoe_sizes).where(shoe_sizes.c.stock_quantity < ShoeModel.min_stock)
+                count_query = count_query.join(shoe_sizes).where(shoe_sizes.c.stock_quantity < ShoeModel.min_stock)
+            
+            # Get total count
+            total_result = await db.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Execute main query
+            query = query.limit(filters.limit).offset(offset)
             result = await db.execute(query)
-            rows = result.all()
+            shoes = result.scalars().all()
             
-            return [
-                {"size_id": str(row.id), "size_number": row.number, "stock_quantity": row.stock_quantity}
-                for row in rows
-            ]
-    
-    async def _get_shoe_colors(self, shoe_id) -> list[str]:
-        """Fetch colors for a shoe"""
-        async with AsyncSessionLocal() as db:
-            query = select(
+            if not shoes:
+                return ShoeListResponseDTO(
+                    data=[],
+                    total=total,
+                    page=filters.page,
+                    limit=filters.limit
+                )
+            
+            # Fetch all related data in the SAME session (no new connections)
+            shoe_ids = [shoe.id for shoe in shoes]
+            
+            # Get all colors
+            colors_query = select(
+                shoe_colors_table.c.shoe_id,
                 ColorModel.name
             ).join(
-                shoe_colors, shoe_colors.c.color_id == ColorModel.id
+                ColorModel, ColorModel.id == shoe_colors_table.c.color_id
             ).where(
-                shoe_colors.c.shoe_id == shoe_id
+                shoe_colors_table.c.shoe_id.in_(shoe_ids)
             )
+            colors_result = await db.execute(colors_query)
+            all_colors = self._group_by_shoe(colors_result.all(), 'shoe_id', 'name')
             
-            result = await db.execute(query)
-            rows = result.all()
-            
-            return [row.name for row in rows]
-    
-    async def _get_shoe_materials(self, shoe_id) -> list[str]:
-        """Fetch materials for a shoe"""
-        async with AsyncSessionLocal() as db:
-            query = select(
+            # Get all materials
+            materials_query = select(
+                shoe_materials_table.c.shoe_id,
                 MaterialModel.name
             ).join(
-                shoe_materials, shoe_materials.c.material_id == MaterialModel.id
+                MaterialModel, MaterialModel.id == shoe_materials_table.c.material_id
             ).where(
-                shoe_materials.c.shoe_id == shoe_id
+                shoe_materials_table.c.shoe_id.in_(shoe_ids)
             )
+            materials_result = await db.execute(materials_query)
+            all_materials = self._group_by_shoe(materials_result.all(), 'shoe_id', 'name')
             
-            result = await db.execute(query)
-            rows = result.all()
+            # Get brand names
+            brand_ids = [s.brand_id for s in shoes if s.brand_id]
+            brand_names = {}
+            if brand_ids:
+                brand_query = select(BrandModel.id, BrandModel.name).where(BrandModel.id.in_(brand_ids))
+                brand_result = await db.execute(brand_query)
+                brand_names = {str(row.id): row.name for row in brand_result.all()}
             
-            return [row.name for row in rows]
+            # Get category names
+            category_ids = [s.category_id for s in shoes if s.category_id]
+            category_names = {}
+            if category_ids:
+                category_query = select(CategoryModel.id, CategoryModel.name).where(CategoryModel.id.in_(category_ids))
+                category_result = await db.execute(category_query)
+                category_names = {str(row.id): row.name for row in category_result.all()}
+            
+            # Get gender names
+            gender_ids = [s.gender_id for s in shoes if s.gender_id]
+            gender_names = {}
+            if gender_ids:
+                gender_query = select(GenderModel.id, GenderModel.name).where(GenderModel.id.in_(gender_ids))
+                gender_result = await db.execute(gender_query)
+                gender_names = {str(row.id): row.name for row in gender_result.all()}
+            
+            # Build DTOs
+            shoes_dto = []
+            for shoe in shoes:
+                colors_data = all_colors.get(str(shoe.id), [])
+                materials_data = all_materials.get(str(shoe.id), [])
+                
+                dto = ShoeDetailDTO(
+                    id=shoe.id,
+                    sku=shoe.sku,
+                    name=shoe.name,
+                    description=shoe.description,
+                    category_id=shoe.category_id,
+                    brand_id=shoe.brand_id,
+                    gender_id=shoe.gender_id,
+                    supplier_id=shoe.supplier_id,
+                    location_id=shoe.location_id,
+                    season_id=shoe.season_id,
+                    image_url=shoe.image_url,
+                    stock=getattr(shoe, 'stock', 0),
+                    min_stock=shoe.min_stock,
+                    price_cost=shoe.price_cost,
+                    price_sale=shoe.price_sale,
+                    is_active=shoe.is_active,
+                    category_name=category_names.get(str(shoe.category_id)) if shoe.category_id else None,
+                    brand_name=brand_names.get(str(shoe.brand_id)) if shoe.brand_id else None,
+                    gender_name=gender_names.get(str(shoe.gender_id)) if shoe.gender_id else None,
+                    supplier_name=None,
+                    location_name=None,
+                    season_name=None,
+                    colors=colors_data,
+                    materials=materials_data
+                )
+                shoes_dto.append(dto)
+            
+            return ShoeListResponseDTO(
+                data=shoes_dto,
+                total=total,
+                page=filters.page,
+                limit=filters.limit
+            )
     
-    async def _get_brand_name(self, brand_id) -> str | None:
-        """Fetch brand name by ID"""
-        if not brand_id:
-            return None
-        async with AsyncSessionLocal() as db:
-            query = select(BrandModel.name).where(BrandModel.id == brand_id)
-            result = await db.execute(query)
-            row = result.scalar_one_or_none()
-            return row
-    
-    async def _get_category_name(self, category_id) -> str | None:
-        """Fetch category name by ID"""
-        if not category_id:
-            return None
-        async with AsyncSessionLocal() as db:
-            query = select(CategoryModel.name).where(CategoryModel.id == category_id)
-            result = await db.execute(query)
-            row = result.scalar_one_or_none()
-            return row
-    
-    async def _get_gender_name(self, gender_id) -> str | None:
-        """Fetch gender name by ID"""
-        if not gender_id:
-            return None
-        async with AsyncSessionLocal() as db:
-            query = select(GenderModel.name).where(GenderModel.id == gender_id)
-            result = await db.execute(query)
-            row = result.scalar_one_or_none()
-            return row
+    def _group_by_shoe(self, rows, shoe_id_col, value_col):
+        """Helper to group results by shoe_id"""
+        result = {}
+        for row in rows:
+            shoe_id = str(getattr(row, shoe_id_col))
+            if shoe_id not in result:
+                result[shoe_id] = []
+            result[shoe_id].append(getattr(row, value_col))
+        return result

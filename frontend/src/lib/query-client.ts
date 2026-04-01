@@ -34,5 +34,6 @@ export const queryKeys = {
   
   // Sales
   sales: ['sales'] as const,
-  saleBatches: ['sales', 'batches'] as const,
+  saleBatches: (page = 1, limit = 10) => ['sales', 'batches', page, limit] as const,
+  shoesWithStock: ['shoes', 'with-stock'] as const,
 }

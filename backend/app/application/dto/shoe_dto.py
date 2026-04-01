@@ -36,6 +36,7 @@ class ShoeDTO(BaseModel):
     location_id: Optional[UUID] = None
     season_id: Optional[UUID] = None
     image_url: Optional[str] = None
+    stock: int = 0
     min_stock: int = 5
     price_cost: Optional[Decimal] = None
     price_sale: Optional[Decimal] = None
@@ -52,7 +53,6 @@ class ShoeDetailDTO(ShoeDTO):
     season_name: Optional[str] = None
     colors: List[str] = []
     materials: List[str] = []
-    sizes: List[ShoeSizeOutputDTO] = []
 
 
 class CreateShoeDTO(BaseModel):
@@ -67,12 +67,12 @@ class CreateShoeDTO(BaseModel):
     location_id: Optional[UUID] = None
     season_id: Optional[UUID] = None
     image_url: Optional[str] = None
+    stock: int = 0
     min_stock: int = 5
     price_cost: Optional[Decimal] = None
     price_sale: Optional[Decimal] = None
     color_ids: List[UUID] = []
     material_ids: List[UUID] = []
-    sizes: List[ShoeSizeInputDTO] = []
 
 
 class UpdateShoeDTO(BaseModel):
@@ -87,11 +87,11 @@ class UpdateShoeDTO(BaseModel):
     location_id: Optional[UUID] = None
     season_id: Optional[UUID] = None
     image_url: Optional[str] = None
+    stock: Optional[int] = None
     min_stock: Optional[int] = None
     price_cost: Optional[Decimal] = None
     price_sale: Optional[Decimal] = None
     is_active: Optional[bool] = None
-    sizes: Optional[List[ShoeSizeUpdateDTO]] = None
 
 
 class ShoeFiltersDTO(BaseModel):

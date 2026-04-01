@@ -11,7 +11,7 @@ interface ShoeCardProps {
 }
 
 export function ShoeCard({ shoe, onClick }: ShoeCardProps) {
-  const totalStock = shoe.sizes?.reduce((acc, s) => acc + s.stock_quantity, 0) || 0
+  const totalStock = shoe.stock || 0
   const stockStatus = getStockStatus(totalStock, shoe.min_stock)
 
   const statusConfig = {
@@ -86,26 +86,6 @@ export function ShoeCard({ shoe, onClick }: ShoeCardProps) {
             </span>
           </div>
         </div>
-
-        {/* Sizes Preview */}
-        {shoe.sizes && shoe.sizes.length > 0 && (
-          <div className="flex items-center gap-1.5 pt-2">
-            <span className="text-xs text-muted-foreground">Tallas:</span>
-            <div className="flex flex-wrap gap-1">
-              {shoe.sizes.slice(0, 5).map((s) => (
-                <span 
-                  key={s.size_number}
-                  className="text-xs px-2 py-0.5 bg-secondary rounded-md text-muted-foreground"
-                >
-                  {s.size_number}
-                </span>
-              ))}
-              {shoe.sizes.length > 5 && (
-                <span className="text-xs text-muted-foreground">+{shoe.sizes.length - 5}</span>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </Card>
   )

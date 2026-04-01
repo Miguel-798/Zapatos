@@ -46,4 +46,5 @@ export interface SaleBatch {
   sale_date: string;
   total_amount: number;
   items: SaleBatchItem[];
+  notes?: string;
 }

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Numeric, DateTime, ForeignKey, Table, Text
+from sqlalchemy import Column, String, Integer, Boolean, Numeric, DateTime, ForeignKey, Table, Text, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -9,23 +9,24 @@ from app.infrastructure.database.database import Base
 shoe_colors = Table(
     'shoe_colors',
     Base.metadata,
-    Column('shoe_id', UUID(as_uuid=True), ForeignKey('shoes.id'), primary_key=True),
-    Column('color_id', UUID(as_uuid=True), ForeignKey('colors.id'), primary_key=True)
+    Column('shoe_id', UUID(as_uuid=True), ForeignKey('shoes.id'), primary_key=True, index=True),
+    Column('color_id', UUID(as_uuid=True), ForeignKey('colors.id'), primary_key=True, index=True)
 )
 
 shoe_materials = Table(
     'shoe_materials',
     Base.metadata,
-    Column('shoe_id', UUID(as_uuid=True), ForeignKey('shoes.id'), primary_key=True),
-    Column('material_id', UUID(as_uuid=True), ForeignKey('materials.id'), primary_key=True)
+    Column('shoe_id', UUID(as_uuid=True), ForeignKey('shoes.id'), primary_key=True, index=True),
+    Column('material_id', UUID(as_uuid=True), ForeignKey('materials.id'), primary_key=True, index=True)
 )
 
 shoe_sizes = Table(
     'shoe_sizes',
     Base.metadata,
-    Column('shoe_id', UUID(as_uuid=True), ForeignKey('shoes.id'), primary_key=True),
-    Column('size_id', UUID(as_uuid=True), ForeignKey('sizes.id'), primary_key=True),
-    Column('stock_quantity', Integer, default=0)
+    Column('shoe_id', UUID(as_uuid=True), ForeignKey('shoes.id'), primary_key=True, index=True),
+    Column('size_id', UUID(as_uuid=True), ForeignKey('sizes.id'), primary_key=True, index=True),
+    Column('stock_quantity', Integer, default=0),
+    Index('ix_shoe_sizes_shoe_stock', 'shoe_id', 'stock_quantity')
 )
 
 
@@ -37,13 +38,14 @@ class ShoeModel(Base):
     sku = Column(String(20), unique=True, nullable=False, index=True)
     name = Column(String(200), nullable=False)
     description = Column(String(1000))
-    category_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'))
-    brand_id = Column(UUID(as_uuid=True), ForeignKey('brands.id'))
-    gender_id = Column(UUID(as_uuid=True), ForeignKey('genders.id'))
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey('suppliers.id'))
-    location_id = Column(UUID(as_uuid=True), ForeignKey('locations.id'))
-    season_id = Column(UUID(as_uuid=True), ForeignKey('seasons.id'))
+    category_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'), index=True)
+    brand_id = Column(UUID(as_uuid=True), ForeignKey('brands.id'), index=True)
+    gender_id = Column(UUID(as_uuid=True), ForeignKey('genders.id'), index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey('suppliers.id'), index=True)
+    location_id = Column(UUID(as_uuid=True), ForeignKey('locations.id'), index=True)
+    season_id = Column(UUID(as_uuid=True), ForeignKey('seasons.id'), index=True)
     image_url = Column(String(500))
+    stock = Column(Integer, default=0, nullable=False)
     min_stock = Column(Integer, default=5)
     price_cost = Column(Numeric(10, 2))
     price_sale = Column(Numeric(10, 2))
