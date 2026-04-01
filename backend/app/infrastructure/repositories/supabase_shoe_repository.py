@@ -240,7 +240,7 @@ class PostgresShoeRepository(ShoeRepository):
         async with self._get_session() as db:
             from app.infrastructure.database.models import shoe_sizes
             query = select(func.count(func.distinct(shoe_sizes.c.shoe_id))).where(
-                shoe_sizes.c.stock <= 5  # Hardcoded low stock threshold
+                shoe_sizes.c.stock_quantity <= 5  # Hardcoded low stock threshold
             )
             result = await db.execute(query)
             return result.scalar() or 0
