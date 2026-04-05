@@ -62,6 +62,59 @@ export const dashboardApi = {
     const response = await fetch(`${API_URL}/api/dashboard/low-stock`);
     return response.json();
   },
+  
+  // Finance endpoints
+  getFinanceKPIs: async (startDate?: string, endDate?: string): Promise<any> => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const response = await fetch(`${API_URL}/api/dashboard/finance/kpis?${params}`);
+    return response.json();
+  },
+  
+  getFinanceAnalysis: async (fixedCosts: number = 0, startDate?: string, endDate?: string): Promise<any> => {
+    const params = new URLSearchParams();
+    params.append('fixed_costs', fixedCosts.toString());
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const response = await fetch(`${API_URL}/api/dashboard/finance/analysis?${params}`);
+    return response.json();
+  },
+  
+  getBreakEven: async (fixedCosts: number): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/dashboard/finance/break-even?fixed_costs=${fixedCosts}`);
+    return response.json();
+  },
+  
+  getCashFlow: async (months: number = 6, fixedCostsMonthly: number = 0): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/dashboard/finance/cash-flow?months=${months}&fixed_costs_monthly=${fixedCostsMonthly}`);
+    return response.json();
+  },
+  
+  getSalesChart: async (months: number = 12): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/dashboard/finance/sales-chart?months=${months}`);
+    return response.json();
+  },
+  
+  getTopProducts: async (limit: number = 5): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/dashboard/finance/top-products?limit=${limit}`);
+    return response.json();
+  },
+  
+  // Settings endpoints
+  getSetting: async (settingId: string): Promise<{ id: string; value: string | null }> => {
+    const response = await fetch(`${API_URL}/api/dashboard/settings/${settingId}`);
+    return response.json();
+  },
+  
+  updateSetting: async (settingId: string, value: string): Promise<{ id: string; value: string }> => {
+    const response = await fetch(`${API_URL}/api/dashboard/settings/${settingId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    });
+    return response.json();
+  },
 };
 
 // Categories API
@@ -341,6 +394,17 @@ export const salesApi = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Error registering sale');
+    }
+    return response.json();
+  },
+  
+  deleteBatch: async (batchId: string): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/sales/batch/${batchId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Error deleting sale');
     }
     return response.json();
   },

@@ -168,3 +168,12 @@ class SaleModel(Base):
     subtotal = Column(Numeric(12, 2), nullable=False)  # quantity * sale_price
     sale_date = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class SettingsModel(Base):
+    """SQLAlchemy model for app settings"""
+    __tablename__ = 'app_settings'
+    
+    id = Column(String(50), primary_key=True)  # e.g., 'fixed_costs'
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

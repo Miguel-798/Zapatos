@@ -19,11 +19,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Footprints,
-  ShoppingCart
+  ShoppingCart,
+  DollarSign
 } from "lucide-react"
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Finanzas", href: "/dashboard/finanzas", icon: DollarSign },
   { name: "Inventario", href: "/inventory", icon: Package },
   { name: "Ventas", href: "/ventas", icon: ShoppingCart },
   { name: "Categorías", href: "/catalogs/categories", icon: Tags },

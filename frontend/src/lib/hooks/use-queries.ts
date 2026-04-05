@@ -73,6 +73,79 @@ export function useLowStock() {
   })
 }
 
+// ============ FINANCE ============
+
+export function useFinanceKPIs(startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['finance', 'kpis', startDate, endDate],
+    queryFn: () => dashboardApi.getFinanceKPIs(startDate, endDate),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+}
+
+export function useFinanceAnalysis(fixedCosts: number = 0, startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['finance', 'analysis', fixedCosts, startDate, endDate],
+    queryFn: () => dashboardApi.getFinanceAnalysis(fixedCosts, startDate, endDate),
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+export function useBreakEven(fixedCosts: number) {
+  return useQuery({
+    queryKey: ['finance', 'break-even', fixedCosts],
+    queryFn: () => dashboardApi.getBreakEven(fixedCosts),
+    staleTime: 1000 * 60 * 5,
+    enabled: fixedCosts > 0,
+  })
+}
+
+export function useCashFlow(months: number = 6, fixedCostsMonthly: number = 0) {
+  return useQuery({
+    queryKey: ['finance', 'cash-flow', months, fixedCostsMonthly],
+    queryFn: () => dashboardApi.getCashFlow(months, fixedCostsMonthly),
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+export function useSalesChart(months: number = 12) {
+  return useQuery({
+    queryKey: ['finance', 'sales-chart', months],
+    queryFn: () => dashboardApi.getSalesChart(months),
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+export function useTopProducts(limit: number = 5) {
+  return useQuery({
+    queryKey: ['finance', 'top-products', limit],
+    queryFn: () => dashboardApi.getTopProducts(limit),
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+// ============ SETTINGS ============
+
+export function useSetting(settingId: string) {
+  return useQuery({
+    queryKey: ['settings', settingId],
+    queryFn: () => dashboardApi.getSetting(settingId),
+    staleTime: 1000 * 60 * 30, // Settings rarely change
+  })
+}
+
+export function useUpdateSetting() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ settingId, value }: { settingId: string; value: string }) => 
+      dashboardApi.updateSetting(settingId, value),
+    onSuccess: (_, { settingId }) => {
+      queryClient.invalidateQueries({ queryKey: ['settings', settingId] })
+    },
+  })
+}
+
 // ============ CATALOGS ============
 
 export function useCategories() {
@@ -177,6 +250,20 @@ export function useRegisterSaleBatch() {
       // Invalidate shoe cache to refresh stock
       queryClient.invalidateQueries({ queryKey: ['shoes'] })
       queryClient.invalidateQueries({ queryKey: queryKeys.saleBatches() })
+    },
+  })
+}
+
+export function useDeleteSaleBatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (batchId: string) => salesApi.deleteBatch(batchId),
+    onSuccess: () => {
+      // Invalidate sale batches cache to refresh list
+      queryClient.invalidateQueries({ queryKey: queryKeys.saleBatches() })
+      // Also invalidate shoes cache to refresh stock
+      queryClient.invalidateQueries({ queryKey: ['shoes'] })
     },
   })
 }

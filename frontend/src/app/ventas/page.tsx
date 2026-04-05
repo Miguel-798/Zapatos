@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
-import { useShoesWithStock, useSaleBatches, useRegisterSaleBatch } from "@/lib/hooks/use-queries"
+import { useShoesWithStock, useSaleBatches, useRegisterSaleBatch, useDeleteSaleBatch } from "@/lib/hooks/use-queries"
 import { Loader2, ShoppingCart, Package, DollarSign, Trash2, Search, Plus, X } from "lucide-react"
 
 interface CartItem {
@@ -26,11 +26,16 @@ export default function VentasPage() {
   const { data: shoesData, isLoading: loading } = useShoesWithStock()
   const { data: batchesData, isLoading: batchesLoading } = useSaleBatches(1, 10)
   const registerSale = useRegisterSaleBatch()
+  const deleteSaleBatch = useDeleteSaleBatch()
   
   const shoes = shoesData || []
   const salesBatches = batchesData?.data || []
   
   const [submitting, setSubmitting] = useState(false)
+  
+  // Delete confirmation dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletingBatch, setDeletingBatch] = useState<any>(null)
   
   // Search
   const [searchQuery, setSearchQuery] = useState("")
@@ -380,7 +385,21 @@ export default function VentasPage() {
                       {/* Expanded Details */}
                       {expandedBatchId === batch.batch_id && batch.items && (
                         <div className="p-3 border-t bg-muted/30">
-                          <p className="text-sm font-medium mb-2">Detalles:</p>
+                          <div className="flex justify-between items-center mb-2">
+                            <p className="text-sm font-medium">Detalles:</p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => {
+                                setDeletingBatch(batch)
+                                setShowDeleteConfirm(true)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Eliminar
+                            </Button>
+                          </div>
                           <div className="space-y-2">
                             {batch.items.map((item: any, idx: number) => (
                               <div key={idx} className="flex justify-between text-sm">
@@ -472,6 +491,77 @@ export default function VentasPage() {
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Agregar al Carrito
               </Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && deletingBatch && (
+        <>
+          <div 
+            className="fixed inset-0 z-50 bg-black/60"
+            onClick={() => setShowDeleteConfirm(false)}
+          />
+          <div className="fixed inset-0 sm:inset-auto sm:top-1/2 sm:-translate-y-1/2 sm:left-1/2 sm:-translate-x-1/2 z-50 w-full sm:max-w-md bg-background rounded-xl shadow-2xl border p-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 text-red-600">
+                <Trash2 className="h-6 w-6" />
+                <h3 className="text-lg font-semibold">Eliminar Venta</h3>
+              </div>
+              
+              <p className="text-muted-foreground">
+                ¿Estás seguro de que deseas eliminar la venta <strong>{deletingBatch.invoice_number}</strong>?
+              </p>
+              
+              <div className="bg-muted p-3 rounded-lg">
+                <p className="text-sm font-medium">Detalles:</p>
+                <p className="text-sm text-muted-foreground">
+                  {deletingBatch.items?.length || 0} productos - Total: {formatCOP(deletingBatch.total_amount)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Se restaurará el stock de los productos
+                </p>
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowDeleteConfirm(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={async () => {
+                    try {
+                      await deleteSaleBatch.mutateAsync(deletingBatch.batch_id)
+                      toast({
+                        title: "Venta eliminada",
+                        description: `Se eliminó ${deletingBatch.invoice_number} y se restauró el stock`,
+                      })
+                      setShowDeleteConfirm(false)
+                      setDeletingBatch(null)
+                    } catch (error: any) {
+                      toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: error.message || "Error al eliminar la venta",
+                      })
+                    }
+                  }}
+                  disabled={deleteSaleBatch.isPending}
+                >
+                  {deleteSaleBatch.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Eliminar
+                </Button>
+              </div>
             </div>
           </div>
         </>

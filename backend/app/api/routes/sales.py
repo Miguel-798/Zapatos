@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
+from uuid import UUID
 from app.application.dto.sale_dto import CreateSaleDTO, SaleWithDetailsDTO, SaleListResponseDTO, CreateSaleBatchDTO, SaleBatchResponseDTO, SaleBatchListResponseDTO
 from app.application.use_cases.sales.register_sale import RegisterSaleUseCase
 from app.application.use_cases.sales.register_sale_batch import RegisterSaleBatchUseCase
 from app.application.use_cases.sales.list_sales import ListSalesUseCase
 from app.application.use_cases.sales.list_sale_batches import ListSaleBatchesUseCase
+from app.application.use_cases.sales.delete_sale_batch import DeleteSaleBatchUseCase
 
 router = APIRouter(prefix="/api/sales", tags=["sales"])
 
@@ -74,5 +76,29 @@ async def register_sale(dto: CreateSaleDTO):
         if "Insufficient stock" in error_msg:
             raise HTTPException(status_code=400, detail=error_msg)
         elif "not found" in error_msg.lower():
+            raise HTTPException(status_code=404, detail=error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
+
+
+@router.delete("/batch/{batch_id}")
+async def delete_sale_batch(batch_id: UUID):
+    """
+    Delete a sale batch (invoice) and restore stock.
+    
+    This endpoint:
+    1. Validates the batch exists
+    2. Deletes all sale items in the batch
+    3. Deletes the batch itself
+    4. Restores stock to shoes for each item deleted
+    
+    Returns success message with items deleted and stock restored.
+    """
+    use_case = DeleteSaleBatchUseCase()
+    try:
+        result = await use_case.execute(batch_id)
+        return result
+    except ValueError as e:
+        error_msg = str(e)
+        if "no encontrado" in error_msg.lower():
             raise HTTPException(status_code=404, detail=error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
